@@ -50,18 +50,17 @@ internal static class Program
         var adbPath = Path.Combine(adbFolderPath, "platform-tools");
         var downloadUri = "https://dl.google.com/android/repository/platform-tools-latest-{0}.zip";
 
+        string platformSpecificAdbExecutable;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             Console.WriteLine("Platform: Linux");
-
-            adbPath = Path.Combine(adbPath, "adb");
+            platformSpecificAdbExecutable = "adb";
             downloadUri = string.Format(downloadUri, "linux");
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             Console.WriteLine("Platform: Windows");
-
-            adbPath = Path.Combine(adbPath, "adb.exe");
+            platformSpecificAdbExecutable = "adb.exe";
             downloadUri = string.Format(downloadUri, "windows");
         }
         else
@@ -70,9 +69,29 @@ internal static class Program
             return;
         }
 
-        var absoluteAdbPath = Path.Combine(currentDirectory, adbPath);
-        if (!File.Exists(absoluteAdbPath))
+        adbPath = Path.Combine(adbPath, platformSpecificAdbExecutable);
+
+        var absoluteAdbPath = adbPath;
+
+        var foundSystemAdb = false;
+        var pathVariableString = Environment.GetEnvironmentVariable("PATH");
+        if (pathVariableString != null)
         {
+            foreach (var pathString in pathVariableString.Split(":"))
+            {
+                if (File.Exists(Path.Combine(pathString, platformSpecificAdbExecutable)))
+                {
+                    Console.WriteLine("Using system ADB");
+                    foundSystemAdb = true;
+                    absoluteAdbPath = Path.Combine(pathString, platformSpecificAdbExecutable);
+                    break;
+                }
+            }
+        }
+
+        if (!foundSystemAdb && !File.Exists(Path.Combine(currentDirectory, adbPath)))
+        {
+            absoluteAdbPath = Path.Combine(currentDirectory, adbPath);
             Console.WriteLine("ADB not found, downloading...");
             DownloadAdb(adbFolderPath, downloadUri).Wait();
 
@@ -84,7 +103,7 @@ internal static class Program
             }
         }
 
-        Server.StartServer(absoluteAdbPath, false);
+        Server.StartServer(absoluteAdbPath, true);
 
         Client.Connect(EndPoint);
 
